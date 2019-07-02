@@ -21,5 +21,8 @@ The solutions in the oldbenchmarks/ folder are in response to an older set of be
 5. Plot the opposite-sign muon pair mass for all combinations of muons
 6. Plot the Missing ET for events that have an opposite-sign muon pair mass in the range 60-120 GeV (double loop over single collection, math)
 7. Plot the sum of the pT of jets with pT > 30 GeV that are not within 0.4 from any lepton with pt > 10 GeV (looping over two collections)
+8. For events with exactly three leptons and a same-flavor opposite-sign lepton pair, find the same-flavor opposite-sign lepton pair with the mass closest to 91.2 GeV and plot the transverse mass of the missing energy and the leading other lepton.
+
+Note that for exercise 8, the n = 3 leptons case is fairly straightforward, whereas the n >= 3 leptons case is currently far more complicated and requires the usage of numba. Both solutions have been provided, with the former in oldbenchmarks/ and the latter in benchmarks/.
 
 I have sought to provide detailed explanations for how each of these things is done in Coffea. Therefore, a lot of the code has verbose comments, which I hope are more helpful than they are distracting!
