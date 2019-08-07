@@ -1,6 +1,8 @@
 # Coffea Benchmarks
 This repository offers solutions to the benchmarks listed [here](https://github.com/iris-hep/adl-benchmarks-index) completed in [Coffea](https://github.com/CoffeaTeam/coffea).
 
+The input data file is: root://eospublic.cern.ch//eos/root-eos/benchmark/Run2012B_SingleMu.root
+
 The solutions in the benchmarks/ folder are in response to the list linked above:
 
 1. Plot the missing ET of all events.
