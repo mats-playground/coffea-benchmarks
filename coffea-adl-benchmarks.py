@@ -290,8 +290,9 @@ files = [
     # "/ssd/Run2012B_SingleMu.root",
     # "/magnetic/Run2012B_SingleMu.root",
 ]
-benchpoints = list(product(queries, chunksizes, ncores, files))
-# benchpoints = [(Q1Processor, 2 ** 19, 48, "/dev/shm/Run2012B_SingleMu.root")]
+benchpoints = list(product(queries, chunksizes, [18], files))
+benchpoints += list(product(queries, [2**19], ncores, files))
+#  benchpoints = [(Q1Processor, 2 ** 19, 48, "/dev/shm/Run2012B_SingleMu.root")]
 results = []
 for query, chunksize, workers, file in tqdm.tqdm(benchpoints):
     _, metrics = run(query, chunksize, workers, file)

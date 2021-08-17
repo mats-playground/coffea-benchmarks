@@ -5,7 +5,7 @@ curl -sSL https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh 
 sudo bash /tmp/miniconda.sh -bfp /usr/local/
 rm -rf /tmp/miniconda.sh
 sudo /usr/local/bin/conda update conda
-conda create -n bench -c conda-forge conda-build voms jupyterlab dask_labextension python==3.8.* ca-policy-lcg xrootd==5.2.0 "uproot>=4.0.8" coffea==0.7.5 lz4 python-xxhash zstandard git
+conda create -n bench -c conda-forge conda-build voms jupyterlab dask_labextension python==3.8.* ca-policy-lcg xrootd==5.2.0 "uproot>=4.0.8" coffea==0.7.5 lz4 python-xxhash zstandard git cmake gcc_linux-64 gxx_linux-64
 ```
 
 Try to configure voms: copy user `.globus`, configure endpoints:
