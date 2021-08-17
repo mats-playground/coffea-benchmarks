@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import os
 import time
 from itertools import product
 
@@ -6,6 +7,7 @@ import awkward as ak
 import hist
 import numpy as np
 import pandas as pd
+import psutil
 import tqdm
 
 from coffea import processor
@@ -13,11 +15,22 @@ from coffea import processor
 # The opendata files are non-standard NanoAOD, so some optional data columns are missing
 processor.NanoAODSchema.warn_missing_crossrefs = False
 
+proc = psutil.Process()
 
-def run(query, chunksize=int(2 ** 19), workers=1):
+
+def run(query, chunksize=2 ** 19, workers=1, file="Run2012B_SingleMu.root"):
+    # https://stackoverflow.com/questions/9551838/how-to-purge-disk-i-o-caches-on-linux
+    os.system("sync")
+    try:
+        with open("/proc/sys/vm/drop_caches", "wb") as fout:
+            fout.write(b"3")
+    except PermissionError:
+        pass
+
     tic = time.monotonic()
+    cputic = proc.cpu_times()
     output, metrics = processor.run_uproot_job(
-        fileset={"SingleMu": ["Run2012B_SingleMu.root"]},
+        fileset={"SingleMu": [file]},
         treename="Events",
         processor_instance=query(),
         executor=processor.futures_executor
@@ -33,10 +46,22 @@ def run(query, chunksize=int(2 ** 19), workers=1):
         maxchunks=None,
     )
     toc = time.monotonic()
+    cputoc = proc.cpu_times()
     metrics["query"] = query.__name__
-    metrics["chunksize"] = chunksize
+    metrics["tgt_chunksize"] = chunksize
+    metrics["chunksize"] = metrics["entries"] / metrics["chunks"]
     metrics["workers"] = workers
     metrics["walltime"] = toc - tic
+    metrics.update(
+        {
+            n: f - i
+            for n, f, i in zip(
+                "user system children_user children_system iowait".split(),
+                cputoc,
+                cputic,
+            )
+        }
+    )
     return output, metrics
 
 
@@ -257,20 +282,25 @@ queries = [
     Q7Processor,
     Q8Processor,
 ]
-chunksizes = 2 ** np.arange(12, 21)
-ncores = [1, 3, 6, 12, 18, 24, 36, 48]
-benchpoints = set(product(queries, [2 ** 19], ncores))
-benchpoints |= set(product(queries, chunksizes, [48]))
+chunksizes = [2 ** 13, 2 ** 15, 2 ** 17, 2 ** 19, 2 ** 21]
+ncores = [3, 6, 12, 24, 48]
+files = [
+    "/dev/shm/Run2012B_SingleMu.root",
+    "/ssd/Run2012B_SingleMu.root",
+    "/magnetic/Run2012B_SingleMu.root",
+]
+benchpoints = set(product(queries, chunksizes, ncores, files))
+# benchpoints = [(Q2Processor, 2 ** 19, 4, "Run2012B_SingleMu.root")]
 results = []
-for query, chunksize, workers in tqdm.tqdm(benchpoints):
-    _, metrics = run(query, chunksize, workers)
+for query, chunksize, workers, file in tqdm.tqdm(benchpoints):
+    _, metrics = run(query, chunksize, workers, file)
     del metrics["columns"]
     results.append(metrics)
 
 
 df = pd.DataFrame(results)
-df["us/evt"] = df["walltime"] * 1e6 / df["entries"]
+df["us*core/evt"] = df["walltime"] * 1e6 * df["workers"] / df["entries"]
 df["b/evt"] = df["bytesread"] / df["entries"]
-df["MBps"] = df["bytesread"] * 1e-6 / df["walltime"]
+df["MB/s/core"] = df["bytesread"] * 1e-6 / df["workers"] / df["walltime"]
 print(df)
 df.to_pickle("results.pkl")
