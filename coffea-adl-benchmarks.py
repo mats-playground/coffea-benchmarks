@@ -1,5 +1,6 @@
 #!/usr/bin/env python
-import os
+import os.path
+import subprocess
 import time
 from itertools import product
 
@@ -20,10 +21,9 @@ proc = psutil.Process()
 
 def run(query, chunksize=2 ** 19, workers=1, file="Run2012B_SingleMu.root"):
     # https://stackoverflow.com/questions/9551838/how-to-purge-disk-i-o-caches-on-linux
-    os.system("sync")
     try:
-        with open("/proc/sys/vm/drop_caches", "wb") as fout:
-            fout.write(b"3")
+        subprocess.run("sync", check=True)
+        subprocess.run(["sudo", "bash", "-c", "echo 3 > /proc/sys/vm/drop_caches"], check=True)
     except PermissionError:
         pass
 
@@ -52,6 +52,7 @@ def run(query, chunksize=2 ** 19, workers=1, file="Run2012B_SingleMu.root"):
     metrics["chunksize"] = metrics["entries"] / metrics["chunks"]
     metrics["workers"] = workers
     metrics["walltime"] = toc - tic
+    metrics["path"] = os.path.dirname(file)
     metrics.update(
         {
             n: f - i
@@ -286,11 +287,11 @@ chunksizes = [2 ** 13, 2 ** 15, 2 ** 17, 2 ** 19, 2 ** 21]
 ncores = [3, 6, 12, 24, 48]
 files = [
     "/dev/shm/Run2012B_SingleMu.root",
-    "/ssd/Run2012B_SingleMu.root",
-    "/magnetic/Run2012B_SingleMu.root",
+    # "/ssd/Run2012B_SingleMu.root",
+    # "/magnetic/Run2012B_SingleMu.root",
 ]
-benchpoints = set(product(queries, chunksizes, ncores, files))
-# benchpoints = [(Q2Processor, 2 ** 19, 4, "Run2012B_SingleMu.root")]
+benchpoints = list(product(queries, chunksizes, ncores, files))
+# benchpoints = [(Q1Processor, 2 ** 19, 48, "/dev/shm/Run2012B_SingleMu.root")]
 results = []
 for query, chunksize, workers, file in tqdm.tqdm(benchpoints):
     _, metrics = run(query, chunksize, workers, file)
