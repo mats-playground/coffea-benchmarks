@@ -23,7 +23,9 @@ def run(query, chunksize=2 ** 19, workers=1, file="Run2012B_SingleMu.root"):
     # https://stackoverflow.com/questions/9551838/how-to-purge-disk-i-o-caches-on-linux
     try:
         subprocess.run("sync", check=True)
-        subprocess.run(["sudo", "bash", "-c", "echo 3 > /proc/sys/vm/drop_caches"], check=True)
+        subprocess.run(
+            ["sudo", "bash", "-c", "echo 3 > /proc/sys/vm/drop_caches"], check=True
+        )
     except PermissionError:
         pass
 
@@ -88,6 +90,41 @@ class Q2Processor(processor.ProcessorABC):
             hist.Hist.new.Reg(100, 0, 200, name="ptj", label="Jet $p_{T}$ [GeV]")
             .Double()
             .fill(ak.flatten(events.Jet.pt))
+        )
+
+    def postprocess(self, accumulator):
+        return accumulator
+
+
+class Q2Kin2DProcessor(processor.ProcessorABC):
+    """Plot the <i>p</i><sub>T</sub> of all jets."""
+
+    def process(self, events):
+        return (
+            hist.Hist.new.Reg(100, 0, 200, name="ptj", label="Jet $p_{T}$ [GeV]")
+            .Reg(100, -5, 5, name="etaj", label=r"Jet $\eta$")
+            .Double()
+            .fill(ak.flatten(events.Jet.pt), ak.flatten(events.Jet.eta))
+        )
+
+    def postprocess(self, accumulator):
+        return accumulator
+
+
+class Q2Kin3DProcessor(processor.ProcessorABC):
+    """Plot the <i>p</i><sub>T</sub> of all jets."""
+
+    def process(self, events):
+        return (
+            hist.Hist.new.Reg(100, 0, 200, name="ptj", label="Jet $p_{T}$ [GeV]")
+            .Reg(100, -5, 5, name="etaj", label=r"Jet $\eta$")
+            .Reg(100, -np.pi, np.pi, name="phij", label=r"Jet $\phi$")
+            .Double()
+            .fill(
+                ak.flatten(events.Jet.pt),
+                ak.flatten(events.Jet.eta),
+                ak.flatten(events.Jet.phi),
+            )
         )
 
     def postprocess(self, accumulator):
@@ -290,9 +327,18 @@ files = [
     # "/ssd/Run2012B_SingleMu.root",
     # "/magnetic/Run2012B_SingleMu.root",
 ]
-benchpoints = list(product(queries, chunksizes, [18], files))
-benchpoints += list(product(queries, [2**19], ncores, files))
-#  benchpoints = [(Q1Processor, 2 ** 19, 48, "/dev/shm/Run2012B_SingleMu.root")]
+# benchpoints = list(product(queries, chunksizes, [18], files))
+# benchpoints += list(product(queries, [2**19], ncores, files))
+# benchpoints = [(Q1Processor, 2 ** 19, 48, "/dev/shm/Run2012B_SingleMu.root")]
+# benchpoints = list(product(queries, [2 ** 19], [1], files))
+queries = [
+    Q2Processor,
+    Q2Kin2DProcessor,
+    Q2Kin3DProcessor,
+]
+ncores = [12, 18, 24]
+chunksizes = [2 ** 17, 2 ** 18, 2 ** 19]
+benchpoints = list(product(queries, chunksizes, ncores, files))
 results = []
 for query, chunksize, workers, file in tqdm.tqdm(benchpoints):
     _, metrics = run(query, chunksize, workers, file)
