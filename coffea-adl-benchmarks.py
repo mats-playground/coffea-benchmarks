@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import psutil
 import tqdm
+from distributed import LocalCluster, Client
 
 from coffea import processor
 
@@ -29,20 +30,24 @@ def run(query, chunksize=2 ** 19, workers=1, file="Run2012B_SingleMu.root"):
     except PermissionError:
         pass
 
+    cluster = LocalCluster(n_workers=workers, threads_per_worker=1)
+    client = Client(cluster)
+
     tic = time.monotonic()
     cputic = proc.cpu_times()
     output, metrics = processor.run_uproot_job(
         fileset={"SingleMu": [file]},
         treename="Events",
         processor_instance=query(),
-        executor=processor.futures_executor
+        executor=processor.dask_executor
         if workers > 1
         else processor.iterative_executor,
         executor_args={
-            "workers": workers,
+            "client": client,
             "schema": processor.NanoAODSchema,
             "savemetrics": True,
             "status": False,
+            "treereduction": 4,
         },
         chunksize=chunksize,
         maxchunks=None,
@@ -65,6 +70,9 @@ def run(query, chunksize=2 ** 19, workers=1, file="Run2012B_SingleMu.root"):
             )
         }
     )
+
+    client.close()
+    cluster.close()
     return output, metrics
 
 
@@ -310,45 +318,45 @@ class Q8Processor(processor.ProcessorABC):
         return accumulator
 
 
-queries = [
-    Q1Processor,
-    Q2Processor,
-    Q3Processor,
-    Q4Processor,
-    Q5Processor,
-    Q6Processor,
-    Q7Processor,
-    Q8Processor,
-]
-chunksizes = [2 ** 13, 2 ** 15, 2 ** 17, 2 ** 19, 2 ** 21]
-ncores = [3, 6, 12, 24, 48]
-files = [
-    "/dev/shm/Run2012B_SingleMu.root",
-    # "/ssd/Run2012B_SingleMu.root",
-    # "/magnetic/Run2012B_SingleMu.root",
-]
-# benchpoints = list(product(queries, chunksizes, [18], files))
-# benchpoints += list(product(queries, [2**19], ncores, files))
-# benchpoints = [(Q1Processor, 2 ** 19, 48, "/dev/shm/Run2012B_SingleMu.root")]
-# benchpoints = list(product(queries, [2 ** 19], [1], files))
-queries = [
-    Q2Processor,
-    Q2Kin2DProcessor,
-    Q2Kin3DProcessor,
-]
-ncores = [12, 18, 24]
-chunksizes = [2 ** 17, 2 ** 18, 2 ** 19]
-benchpoints = list(product(queries, chunksizes, ncores, files))
-results = []
-for query, chunksize, workers, file in tqdm.tqdm(benchpoints):
-    _, metrics = run(query, chunksize, workers, file)
-    del metrics["columns"]
-    results.append(metrics)
+if __name__ == "__main__":
+    queries = [
+        Q1Processor,
+        Q2Processor,
+        Q3Processor,
+        Q4Processor,
+        Q5Processor,
+        Q6Processor,
+        Q7Processor,
+        Q8Processor,
+    ]
+    chunksizes = [2 ** 13, 2 ** 15, 2 ** 17, 2 ** 19, 2 ** 21]
+    ncores = [3, 6, 12, 24, 48]
+    files = [
+        "/dev/shm/Run2012B_SingleMu.root",
+        # "/ssd/Run2012B_SingleMu.root",
+        # "/magnetic/Run2012B_SingleMu.root",
+    ]
+    # benchpoints = list(product(queries, chunksizes, [18], files))
+    # benchpoints += list(product(queries, [2**19], ncores, files))
+    # benchpoints = [(Q1Processor, 2 ** 19, 48, "/dev/shm/Run2012B_SingleMu.root")]
+    # benchpoints = list(product(queries, [2 ** 19], [1], files))
+    queries = [
+        Q2Processor,
+        Q2Kin2DProcessor,
+        Q2Kin3DProcessor,
+    ]
+    ncores = [12, 18, 24]
+    chunksizes = [2 ** 17, 2 ** 18, 2 ** 19]
+    benchpoints = list(product(queries, chunksizes, ncores, files))
+    results = []
+    for query, chunksize, workers, file in tqdm.tqdm(benchpoints):
+        _, metrics = run(query, chunksize, workers, file)
+        del metrics["columns"]
+        results.append(metrics)
 
-
-df = pd.DataFrame(results)
-df["us*core/evt"] = df["walltime"] * 1e6 * df["workers"] / df["entries"]
-df["b/evt"] = df["bytesread"] / df["entries"]
-df["MB/s/core"] = df["bytesread"] * 1e-6 / df["workers"] / df["walltime"]
-print(df)
-df.to_pickle("results.pkl")
+    df = pd.DataFrame(results)
+    df["us*core/evt"] = df["walltime"] * 1e6 * df["workers"] / df["entries"]
+    df["b/evt"] = df["bytesread"] / df["entries"]
+    df["MB/s/core"] = df["bytesread"] * 1e-6 / df["workers"] / df["walltime"]
+    print(df)
+    df.to_pickle("results.pkl")
