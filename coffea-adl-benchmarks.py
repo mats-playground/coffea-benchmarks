@@ -10,7 +10,6 @@ import numpy as np
 import pandas as pd
 import psutil
 import tqdm
-from distributed import LocalCluster, Client
 
 from coffea import processor
 
@@ -20,18 +19,16 @@ processor.NanoAODSchema.warn_missing_crossrefs = False
 proc = psutil.Process()
 
 
-def run(query, chunksize=2 ** 19, workers=1, file="Run2012B_SingleMu.root"):
-    # https://stackoverflow.com/questions/9551838/how-to-purge-disk-i-o-caches-on-linux
-    try:
-        subprocess.run("sync", check=True)
-        subprocess.run(
-            ["sudo", "bash", "-c", "echo 3 > /proc/sys/vm/drop_caches"], check=True
-        )
-    except PermissionError:
-        pass
-
-    cluster = LocalCluster(n_workers=workers, threads_per_worker=1)
-    client = Client(cluster)
+def run(query, chunksize, workers, file):
+    if not file.startswith("/dev/shm"):
+        # https://stackoverflow.com/questions/9551838/how-to-purge-disk-i-o-caches-on-linux
+        try:
+            subprocess.run("sync", check=True)
+            subprocess.run(
+                ["sudo", "bash", "-c", "echo 3 > /proc/sys/vm/drop_caches"], check=True
+            )
+        except PermissionError:
+            pass
 
     tic = time.monotonic()
     cputic = proc.cpu_times()
@@ -39,15 +36,13 @@ def run(query, chunksize=2 ** 19, workers=1, file="Run2012B_SingleMu.root"):
         fileset={"SingleMu": [file]},
         treename="Events",
         processor_instance=query(),
-        executor=processor.dask_executor
+        executor=processor.futures_executor
         if workers > 1
         else processor.iterative_executor,
         executor_args={
-            "client": client,
             "schema": processor.NanoAODSchema,
             "savemetrics": True,
             "status": False,
-            "treereduction": 4,
         },
         chunksize=chunksize,
         maxchunks=None,
@@ -71,8 +66,6 @@ def run(query, chunksize=2 ** 19, workers=1, file="Run2012B_SingleMu.root"):
         }
     )
 
-    client.close()
-    cluster.close()
     return output, metrics
 
 
@@ -330,24 +323,19 @@ if __name__ == "__main__":
         Q8Processor,
     ]
     chunksizes = [2 ** 13, 2 ** 15, 2 ** 17, 2 ** 19, 2 ** 21]
-    ncores = [3, 6, 12, 24, 48]
+    ncores = [1, 3, 6, 12, 24, 48]
     files = [
         "/dev/shm/Run2012B_SingleMu.root",
         # "/ssd/Run2012B_SingleMu.root",
         # "/magnetic/Run2012B_SingleMu.root",
     ]
-    # benchpoints = list(product(queries, chunksizes, [18], files))
-    # benchpoints += list(product(queries, [2**19], ncores, files))
-    # benchpoints = [(Q1Processor, 2 ** 19, 48, "/dev/shm/Run2012B_SingleMu.root")]
-    # benchpoints = list(product(queries, [2 ** 19], [1], files))
-    queries = [
-        Q2Processor,
-        Q2Kin2DProcessor,
-        Q2Kin3DProcessor,
-    ]
+    benchpoints = list(product(queries, chunksizes, [18], files))
+    benchpoints += list(product(queries, [2**19], ncores, files))
+    queries = [Q2Processor, Q2Kin2DProcessor, Q2Kin3DProcessor]
     ncores = [12, 18, 24]
     chunksizes = [2 ** 17, 2 ** 18, 2 ** 19]
-    benchpoints = list(product(queries, chunksizes, ncores, files))
+    benchpoints += list(product(queries, chunksizes, ncores, files))
+    benchpoints = list(set(benchpoints))
     results = []
     for query, chunksize, workers, file in tqdm.tqdm(benchpoints):
         _, metrics = run(query, chunksize, workers, file)

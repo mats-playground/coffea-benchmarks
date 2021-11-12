@@ -238,12 +238,12 @@ double query8(const char * filename) {
 }
 
 int main(int argc, const char ** argv) {
-    if ( argc != 2 ) {
+    if ( argc != 3 ) {
       std::cout << "Usage: PROG ncores filename" << std::endl;
       return 1;
     }
-    int ncores = std::stoi(argv[0]);
-    const char * filename = argv[1];
+    int ncores = std::stoi(argv[1]);
+    const char * filename = argv[2];
 
     if ( ncores > 1 ) {
       ROOT::EnableImplicitMT(ncores);
