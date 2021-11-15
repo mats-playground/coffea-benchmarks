@@ -11,7 +11,7 @@ import pandas as pd
 import psutil
 import tqdm
 
-from coffea import processor
+from coffea import processor, nanoevents
 
 # The opendata files are non-standard NanoAOD, so some optional data columns are missing
 processor.NanoAODSchema.warn_missing_crossrefs = False
@@ -32,21 +32,21 @@ def run(query, chunksize, workers, file):
 
     tic = time.monotonic()
     cputic = proc.cpu_times()
-    output, metrics = processor.run_uproot_job(
-        fileset={"SingleMu": [file]},
-        treename="Events",
-        processor_instance=query(),
-        executor=processor.futures_executor
-        if workers > 1
-        else processor.iterative_executor,
-        executor_args={
-            "schema": processor.NanoAODSchema,
-            "savemetrics": True,
-            "status": False,
-        },
+
+    if workers > 1:
+        executor = processor.FuturesExecutor(workers=workers, status=False)
+    else:
+        executor = processor.IterativeExecutor(status=False)
+    runner = processor.Runner(
+        executor=executor,
+        schema=nanoevents.NanoAODSchema,
+        savemetrics=True,
         chunksize=chunksize,
-        maxchunks=None,
     )
+    output, metrics = runner(
+        fileset={"SingleMu": [file]}, treename="Events", processor_instance=query(),
+    )
+
     toc = time.monotonic()
     cputoc = proc.cpu_times()
     metrics["query"] = query.__name__
@@ -206,11 +206,7 @@ class Q6Processor(processor.ProcessorABC):
             trijet[ak.singletons(ak.argmin(abs(trijet.p4.mass - 172.5), axis=1))]
         )
         maxBtag = np.maximum(
-            trijet.j1.btag,
-            np.maximum(
-                trijet.j2.btag,
-                trijet.j3.btag,
-            ),
+            trijet.j1.btag, np.maximum(trijet.j2.btag, trijet.j3.btag,),
         )
         return {
             "trijetpt": hist.Hist.new.Reg(
@@ -270,10 +266,7 @@ class Q8Processor(processor.ProcessorABC):
     def process(self, events):
         events["Electron", "pdgId"] = -11 * events.Electron.charge
         events["Muon", "pdgId"] = -13 * events.Muon.charge
-        events["leptons"] = ak.concatenate(
-            [events.Electron, events.Muon],
-            axis=1,
-        )
+        events["leptons"] = ak.concatenate([events.Electron, events.Muon], axis=1,)
         events = events[ak.num(events.leptons) >= 3]
 
         pair = ak.argcombinations(events.leptons, 2, fields=["l1", "l2"])
@@ -330,7 +323,7 @@ if __name__ == "__main__":
         # "/magnetic/Run2012B_SingleMu.root",
     ]
     benchpoints = list(product(queries, chunksizes, [24], files))
-    benchpoints += list(product(queries, [2**19], ncores, files))
+    benchpoints += list(product(queries, [2 ** 19], ncores, files))
     queries = [Q2Processor, Q2Kin2DProcessor, Q2Kin3DProcessor]
     ncores = [12, 18, 24]
     chunksizes = [2 ** 17, 2 ** 18, 2 ** 19]
