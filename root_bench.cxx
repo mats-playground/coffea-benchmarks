@@ -69,21 +69,19 @@ double query5(const char * filename) {
     return h->Integral();
 }
 
-ROOT::RVec<std::size_t> find_trijet(Vec<float> pt, Vec<float> eta, Vec<float> phi, Vec<float> mass)
-{
-    const auto c = ROOT::VecOps::Combinations(pt, 3);
-    const auto make_p4 = [&](std::size_t idx) {
-        return ROOT::Math::PtEtaPhiMVector(pt[idx], eta[idx], phi[idx], mass[idx]);
-    };
+using ROOT::Math::XYZTVector;
+
+ROOT::RVec<std::size_t> find_trijet(Vec<XYZTVector> jets) {
+  const auto c = ROOT::VecOps::Combinations(jets, 3);
 
     float trijet_mass = -1;
     float distance = 1e9;
     const auto top_mass = 172.5;
     std::size_t idx = 0;
     for (auto i = 0; i < c[0].size(); i++) {
-        auto p1 = make_p4(c[0][i]);
-        auto p2 = make_p4(c[1][i]);
-        auto p3 = make_p4(c[2][i]);
+        auto p1 = jets[c[0][i]];
+        auto p2 = jets[c[1][i]];
+        auto p3 = jets[c[2][i]];
         const auto tmp_mass = (p1 + p2 + p3).mass();
         const auto tmp_distance = std::abs(tmp_mass - top_mass);
         if (tmp_distance < distance) {
@@ -106,9 +104,14 @@ float trijet_pt(Vec<float> pt, Vec<float> eta, Vec<float> phi, Vec<float> mass, 
 }
 
 double query6(const char * filename) {
+    using ROOT::Math::PtEtaPhiEVector;
+    using ROOT::VecOps::Construct;
     ROOT::RDataFrame df("Events", filename);
     auto df2 = df.Filter([](unsigned int n) { return n >= 3; }, {"nJet"}, "At least three jets")
-                 .Define("Trijet_idx", find_trijet, {"Jet_pt", "Jet_eta", "Jet_phi", "Jet_mass"});
+                 .Define("JetXYZT", [](Vec<float> pt, Vec<float> eta, Vec<float> phi, Vec<float> E) {
+                              return Construct<XYZTVector>(Construct<PtEtaPhiEVector>(pt, eta, phi, E));},
+                         {"Jet_pt", "Jet_eta", "Jet_phi", "Jet_mass"})
+                 .Define("Trijet_idx", find_trijet, {"JetXYZT"});
     auto h1 = df2.Define("Trijet_pt", trijet_pt, {"Jet_pt", "Jet_eta", "Jet_phi", "Jet_mass", "Trijet_idx"})
                  .Histo1D<float>({"", ";Trijet pt (GeV);N_{Events}", 100, 15, 40}, "Trijet_pt");
     auto h2 = df2.Define("Trijet_leadingBtag",
