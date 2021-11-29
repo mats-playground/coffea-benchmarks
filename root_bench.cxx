@@ -104,12 +104,12 @@ float trijet_pt(Vec<float> pt, Vec<float> eta, Vec<float> phi, Vec<float> mass, 
 }
 
 double query6(const char * filename) {
-    using ROOT::Math::PtEtaPhiEVector;
+    using ROOT::Math::PtEtaPhiMVector;
     using ROOT::VecOps::Construct;
     ROOT::RDataFrame df("Events", filename);
     auto df2 = df.Filter([](unsigned int n) { return n >= 3; }, {"nJet"}, "At least three jets")
-                 .Define("JetXYZT", [](Vec<float> pt, Vec<float> eta, Vec<float> phi, Vec<float> E) {
-                              return Construct<XYZTVector>(Construct<PtEtaPhiEVector>(pt, eta, phi, E));},
+                 .Define("JetXYZT", [](Vec<float> pt, Vec<float> eta, Vec<float> phi, Vec<float> m) {
+                              return Construct<XYZTVector>(Construct<PtEtaPhiMVector>(pt, eta, phi, m));},
                          {"Jet_pt", "Jet_eta", "Jet_phi", "Jet_mass"})
                  .Define("Trijet_idx", find_trijet, {"JetXYZT"});
     auto h1 = df2.Define("Trijet_pt", trijet_pt, {"Jet_pt", "Jet_eta", "Jet_phi", "Jet_mass", "Trijet_idx"})
